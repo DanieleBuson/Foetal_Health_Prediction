@@ -1,0 +1,690 @@
+---
+title: "Foetal Health using CTG"
+subtitle: "Analysis, Classification and Prediction of foetal health through supervised learning models."
+author: "Daniele Buson, Sasa Ljubisavljevic, Jonas Renfer"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: journal
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE)
+```
+
+## 1. Introduction
+
+Reduction of child mortality is reflected in several of the United Nations' Sustainable Development
+Goals and is a key indicator of human progress.
+In the last three decades, the world made remarkable progress in child survival. In the 90’s, 1 in 11
+children died before the age of five. Nowadays, the ratio is 1 in 26 children. (1)
+The UN expects to lower this percentage to 25 deaths in 1000 births by 2030.
+Another aspect, alongside this, that is crucial in the Sustainable Development Goals is maternal
+mortality. About 287000 women died during and following pregnancy and childbirth in 2020. Almost
+95% of all maternal deaths occurred in low and lower middle-income countries in 2020, and most
+could have been prevented. (2)
+In this context, Cardiotocography (CTGs) is a simple and cost accessible option to assess foetal
+health, allowing healthcare professionals to take action in order to prevent child and maternal
+mortality. The equipment itself works by sending ultrasound pulses and reading its response, thus
+shedding light on foetal heart rate (FHR), foetal movements, uterine contractions and more.
+
+## 2. Dataset Overview {.tabset}
+
+In the section below is shown an overview of the data. 
+The subsection 2.1 shows the table and the key figures obtained through the R-command "summary".
+In the 2.2 a correlation plot is presented, helping us understand if there is some form of dependence between the data. 
+
+### 2.1 Table and Summary
+The dataset columns are defined as follow:
+<ol> 
+  <li> baseline.value : baseline foetal heart rate</li>
+  <li> accelerations : number of accelerations per second</li>
+  <li> fetal_movement : number of foetal movements per second</li>
+  <li> uterine_contractions : number of uterine contractions per second</li>
+  <li> light_decelerations : number of LDs per second (3)</li>
+  <li> severe_decelerations : number of SDs per second (3)</li>
+  <li> prolonged_decelarations: number of PDs per second (3)</li>
+  <li> abnormal_short_term_variability : percentage of time with abnormal short term variability (4)</li>
+  <li> mean_value_of_short_term_variability : mean value of short term variability (4)</li>
+  <li> percentage_of_time_with_abnormal_long_term_variability : percentage of time with abnormal long term variability (4)</li>
+  <li> mean_of_long_term_variability : mean value of long term variability (4)</li>
+  <li> histogram_width : width of the histogram made using all values from a record</li>
+  <li> histogram_min : histogram minimum value</li>
+  <li> histogram_max : histogram maximum value</li>
+  <li> histogram_number_of_peaks : number of peaks in the exam histogram</li>
+  <li> histogram_number_of_zeros : number of zeroes in the exam histogram</li>
+  <li> histogram_mode : histogram mode</li>
+  <li> histogram_mean : histogram mean</li>
+  <li> histogram_median : histogram median</li>
+  <li> histogram_variance : histogram variance</li>   
+  <li> histogram_tendency : histogram trend</li>
+  <li> fetal_health : foetal health, 1 = normal, 2 = suspect, 3 = pathological</li>
+</ol>  
+  
+```{r table_summary, echo=FALSE, include = TRUE}
+df_fetal_health <- read.csv("Data/fetal_health.csv")
+head(df_fetal_health)
+summary(df_fetal_health)
+```
+
+The reader will find more deep insights on the columns in the next section (3. EDA).
+
+### 2.2 Correlation plot
+
+```{r correlationplot, echo=FALSE, include = TRUE, warning=FALSE, message=FALSE, cache = TRUE, fig.height=10,fig.width=10}
+library(ggplot2)
+library(GGally)
+
+df_fetal_health[, "fetal_health"] <- factor(df_fetal_health[, "fetal_health"])
+
+ggpairs(data = df_fetal_health, columns = 1:11,
+        aes(color = fetal_health, alpha = 0.5)) +
+  scale_fill_manual(values = c("yellow3", "orange3", "red3")) + 
+  scale_color_manual(values = c("yellow3", "orange3", "red3"))
+```
+
+The correlation plot below resembles a square matrix and it can be divided into three parts.
+Scatter plots of each pair of numeric variables are drawn on the left part of the figure. 
+Pearson correlation is displayed on the right. Variable distribution is available on the diagonal. 
+In this case, the presence of three different colours is due to the fact that we are considering the three 
+possible categories of foetal health (normal, suspect and pathological).
+We are going to dive more deeply into the densities in the next section, the EDA. 
+
+## 3. EDA {.tabset}
+
+In the EDA (exploratory data analysis) we are going to focus on the distribution of some variables. 
+In particular, we would like to group variables by categories. The reader can find 
+below the six sections that we are going to discuss:
+<ol>
+  <li>Heart Rate Baseline</li>
+  <li>Accelerations and Decelerations</li>
+  <li>Foetal and Uterine Movements</li>
+  <li>Short Term Variability VS Long Term Variability</li>
+  <li>Heart Rate Histogram</li>
+  <li>Foetal Health</li>
+</ol>
+
+### 3.1 Heart Rate Baseline
+
+Normal baseline FHR ranges from 110 to 160 beats/min. A baseline change is interpreted as one that persists for 10 minutes or
+more and occurs between or in the absence of contractions. An FHR of less than 110 beats/min is considered bradycardia. FHR is a
+function of the autonomic nervous system. The vagus nerve provides an inhibitory affect, whereas the sympathetic nervous system
+provides an excitatory influence. As the gestation advances, the vagal system gains dominance, resulting in a gradual decrease in
+the baseline. Stressful events such as hypoxia, uterine contractions, and head compression evoke a baroreceptor reflex, with
+resulting peripheral vasoconstriction and hypertension causing bradycardia.(6)
+
+```{r hrbaseline, echo=FALSE, include=TRUE, message=FALSE, warning = FALSE, fig.width=12}
+library(gridExtra)
+library(ggplot2)
+
+hist_HearthRate <- ggplot(data = df_fetal_health, 
+                          aes(x = baseline.value, 
+                              fill = fetal_health)) +
+  geom_density(alpha = 0.3) + 
+  scale_fill_manual(name = "Fetal Health Condition", values = c("yellow3", "orange3", "red3"))  +
+  theme(
+    legend.background = element_rect(fill = "white", color = "black", linetype = "solid"),
+    legend.title = element_text(size = 10),
+    plot.title = element_text(color = "black", size = 20)
+  ) +
+  ggtitle("Density Baseline Value of Heart Beat") +
+  ylab("Density") +
+  xlab("Baseline Value")
+
+box_HearthRate <- ggplot(data = df_fetal_health, 
+                         aes(x = fetal_health,
+                             y = baseline.value, 
+                             fill = fetal_health)) +
+  geom_boxplot(alpha = 0.3) + 
+  scale_fill_manual(name = "Fetal Health Condition", values = c("yellow3", "orange3", "red3")) +
+  theme(
+    legend.background = element_rect(fill = "white", color = "black", linetype = "solid"),
+    legend.title = element_text(size = 10),
+    plot.title = element_text(color = "black", size = 20)
+  ) +
+  ggtitle("Boxplot Baseline Value of Heart Beat") +
+  ylab("Baseline Value") +
+  xlab("Fetal Health Condition")
+
+grid.arrange(hist_HearthRate, box_HearthRate, ncol = 2, nrow = 1)
+```
+
+In this case, the graphs seem to be quite eloquent. In fact, in the density plot, 
+the reader can understand how the normal cases have a distribution that is symmetrical to respect to the median.
+The suspect and pathological have different density distributions.
+The suspect cases tend to be on the right side (left skewed, average higher than the normal cases).
+For what concerns the pathological foetus, it is only possible to notice that the distribution has 
+four peaks. The "highest" one is in the middle, respecting the estimated median. However, two peaks 
+are located on the edges. 
+More insights on the distributions can be spotted in the boxplot on the right.
+
+### 3.2 Accelerations and Decelerations
+
+Accelerations are transient increases in the FHR. They are usually associated with foetal movement, vaginal examinations, uterine
+contractions, umbilical vein compression, foetal scalp stimulation or even external acoustic stimulation. The presence of
+accelerations is considered a reassuring sign of foetal well-being. An acceleration pattern preceding or following a variable
+deceleration (the “shoulders” of the deceleration) is seen only when the foetus is not hypoxic. Accelerations are the basis for
+the nonstress test (NST). The presence of at least two accelerations, each lasting for 15 or more seconds above baseline and
+peaking at 15 or more bpm, in a 20-minute period is considered a reactive NST.
+Early decelerations (also light decelerations) are caused by foetal head compression during uterine contraction, resulting in
+vagal stimulation and slowing of the heart rate. This type of deceleration has a uniform shape, with a slow onset that coincides
+with the start of the contraction and a slow return to the baseline that coincides with the end of the contraction. 
+Variable decelerations (also severe decelerations) are shown by an acute fall in the FHR with a rapid downslope and a variable
+recovery phase. They are characteristically variable in duration, intensity and timing. Their graphs resemble the letter “U,” 
+“V” or “W” and may not bear a constant relationship to uterine contractions. They are the most commonly encountered patterns 
+during labor and occur frequently in patients who have experienced premature rupture of membranes and decreased amniotic fluid volume.
+Variable decelerations are caused by compression of the umbilical cord.
+Late decelerations (also prolongued) are associated with uteroplacental insufficiency and are provoked by uterine contractions.
+Any decrease in uterine blood flow or placental dysfunction can cause late decelerations. Maternal hypotension and uterine
+hyperstimulation may decrease uterine blood flow. Postdate gestation, preeclampsia, chronic hypertension and diabetes mellitus
+are among the causes of placental dysfunction. Other maternal conditions such as acidosis and hypovolemia associated with
+diabetic ketoacidosis may lead to a decrease in uterine blood flow, late decelerations and decreased baseline variability. (7) 
+
+```{r accel_decel, echo=FALSE, include=TRUE, message=FALSE, warning = FALSE, fig.width=12, fig.height=8}
+density_acceleration <- ggplot(data = df_fetal_health, 
+                          aes(x = accelerations, 
+                              fill = fetal_health)) +
+  geom_density(alpha = 0.3) + 
+  scale_fill_manual(name = "Fetal Health Condition", values = c("yellow3", "orange3", "red3"))  +
+  theme(
+    legend.background = element_rect(fill = "white", color = "black", linetype = "solid"),
+    legend.title = element_text(size = 10),
+    plot.title = element_text(color = "black", size = 20)
+  ) +
+  ggtitle("Accelerations") +
+  ylab("Density") +
+  xlab("Accelerations per second")
+
+density_light_decelerations <- ggplot(data = df_fetal_health, 
+                          aes(x = light_decelerations, 
+                              fill = fetal_health)) +
+  geom_density(alpha = 0.3) + 
+  scale_fill_manual(name = "Fetal Health Condition", values = c("yellow3", "orange3", "red3"))  +
+  theme(
+    legend.background = element_rect(fill = "white", color = "black", linetype = "solid"),
+    legend.title = element_text(size = 10),
+    plot.title = element_text(color = "black", size = 20)
+  ) +
+  ggtitle("Light Decelerations (LD)") +
+  ylab("Density") +
+  xlab("Light Decelerations per second")
+
+density_severe_decelerations <- ggplot(data = df_fetal_health, 
+                          aes(x = severe_decelerations, 
+                              fill = fetal_health)) +
+  geom_density(alpha = 0.3) + 
+  scale_fill_manual(name = "Fetal Health Condition", values = c("yellow3", "orange3", "red3"))  +
+  theme(
+    legend.background = element_rect(fill = "white", color = "black", linetype = "solid"),
+    legend.title = element_text(size = 10),
+    plot.title = element_text(color = "black", size = 20)
+  ) +
+  ggtitle("Severe Decelerations (SD)") +
+  ylab("Density") +
+  xlab("Severe Decelerations per second")
+
+density_prolongued_decelarations <- ggplot(data = df_fetal_health, 
+                          aes(x = prolongued_decelerations, 
+                              fill = fetal_health)) +
+  geom_density(alpha = 0.3) + 
+  scale_fill_manual(name = "Fetal Health Condition", values = c("yellow3", "orange3", "red3"))  +
+  theme(
+    legend.background = element_rect(fill = "white", color = "black", linetype = "solid"),
+    legend.title = element_text(size = 10),
+    plot.title = element_text(color = "black", size = 20)
+  ) +
+  ggtitle("Prolongued Deceelerations (PD)") +
+  ylab("Density") +
+  xlab("Prolongued decelerations per second")
+
+grid.arrange(density_acceleration,
+             density_light_decelerations,
+             density_severe_decelerations,
+             density_prolongued_decelarations,
+             ncol = 2, nrow = 2)
+```
+
+The accelerations and the decelerations often present a different distribution per class. 
+This could be a crucial aspect. In fact, these differences in the distribution can help us 
+modelling our problem, through machine learning methods, as we will discuss in section 4. 
+For what concerns accelerations per second, normal cases are distributed in the range between 0.00 and 0.015. 
+This aspect differs significantly from the other two cases which are distributed around to the value 0. This is expected since, 
+as written before, accelerations are considered to be a reassuring sign for foetal health. 
+The light deceleration distribution is analogous in normal and suspect cases. On the other hand, 
+pathological cases follow a different distribution. 
+The severe decelerations are present only for pathological cases, therefore, the distribution 
+graph is not very eloquent. 
+In conclusion, in the last graph, we can see how the cases are different from each 
+other if we are talking about prolongued decelerations. This could be an important aspect of
+the detection of a pathological and suspect case. 
+
+### 3.3 Foetal and Uterine Movements
+
+The uterus is a hollow organ that provides protective and nutritive support to the ovum from the moment it is 
+fertilized until it grows into a well-developed fetus ready for parturition. Its middle muscular layer is called 
+the myometrium, which is known for its rhythmic contractions which result in 'endometrial waves' in the nonpregnant uterus, 
+Braxton Hicks contractions during pregnancy, and true labor towards the end of the third trimester. Labor contractions 
+are painful, regular, and present with a change in cervical dilation and/or effacement. (8)
+Foetal movements felt by pregnant women are a sign that the foetus is growing in size and strength. The mother is usually 
+the first to feel these movements, which can later be perceived by others. Women are often taught by their 
+health care provider to monitor or be aware of the movements of the foetus. Decreased foetal movement can be a warning 
+sign of potential foetal impairment or risk, and may warrant further evaluation. This activity reviews the 
+evaluation of foetal movement and discusses the role of the interprofessional team in educating patients on 
+how to track foetal movement which can improve patient outcomes.(9)
+
+```{r movements, echo=FALSE, include=TRUE, message=FALSE, warning = FALSE, fig.width=12, fig.height=6}
+density_uterine_contractions <- ggplot(data = df_fetal_health, 
+                          aes(x = uterine_contractions, 
+                              fill = fetal_health)) +
+  geom_density(alpha = 0.3) + 
+  scale_fill_manual(name = "Fetal Health Condition", values = c("yellow3", "orange3", "red3"))  +
+  theme(
+    legend.background = element_rect(fill = "white", color = "black", linetype = "solid"),
+    legend.title = element_text(size = 10),
+    plot.title = element_text(color = "black", size = 20)
+  ) +
+  ggtitle("Uterine Contractions") +
+  ylab("Density") +
+  xlab("Uterine Contractions per second")
+
+density_fetal_movements <- ggplot(data = df_fetal_health, 
+                          aes(x = fetal_movement, 
+                              fill = fetal_health)) +
+  geom_density(alpha = 0.3) + 
+  scale_fill_manual(name = "Fetal Health Condition", values = c("yellow3", "orange3", "red3"))  +
+  theme(
+    legend.background = element_rect(fill = "white", color = "black", linetype = "solid"),
+    legend.title = element_text(size = 10),
+    plot.title = element_text(color = "black", size = 20)
+  ) +
+  ggtitle("Foetal Movement") +
+  ylab("Density") +
+  xlab("Foetal Movements per second")
+
+grid.arrange(density_uterine_contractions, density_fetal_movements, 
+             nrow = 1, ncol = 2)
+```
+
+It is possible to notice how, in the uterine contraction graph, the suspect and pathological cases tend to be right-skewed, while the distribution of normal cases seems to be more centred. This is a remarkable aspect that we have to take into account.
+For what concerns the foetal movements graph, the vast majority of the values are 0 movements per second. 
+In this case, it is very difficult to distinguish between the three classes. 
+However, for any other clarification and graphs, we advise the reader to consult the shiny app that is provided in the dedicated folder. 
+
+### 3.4 Short Term Variability VS Long Term Variability
+
+Short Term Variability(STV) is the beat-to-beat variation in foetal heart rate. The CTG monitor calculates STV
+computerised by dividing every minute of the trace into 16 sections and the average pulse interval is calculated for every section.
+STV is the mean value of pulse interval differences between sections during one minute and the first value 
+is displayed after 10 min recording. Thereafter new values are added and STV is updated continuously for up to 60 min. (10)
+Long-term variability is the variations in interval length over a certain number of
+R-R intervals, clinically expressed as the number of zero crossings, the bandwidth,
+or the amplitude of frequency changes. (11)
+
+```{r stvltv, echo=FALSE, include=TRUE, message=FALSE, warning = FALSE, fig.width=12, fig.height=6}
+density_STV <- ggplot(data = df_fetal_health, 
+                                       aes(x = abnormal_short_term_variability, 
+                                           fill = fetal_health)) +
+  geom_density(alpha = 0.3) + 
+  scale_fill_manual(name = "Fetal Health Condition", values = c("yellow3", "orange3", "red3"))  +
+  theme(
+    legend.background = element_rect(fill = "white", color = "black", linetype = "solid"),
+    legend.title = element_text(size = 10),
+    plot.title = element_text(color = "black", size = 20)
+  ) +
+  ggtitle("Percentage of time with abnormal STV") +
+  ylab("Density") +
+  xlab("Percentage")
+
+density_LTV <- ggplot(data = df_fetal_health, 
+                                  aes(x = percentage_of_time_with_abnormal_long_term_variability, 
+                                      fill = fetal_health)) +
+  geom_density(alpha = 0.3) + 
+  scale_fill_manual(name = "Fetal Health Condition", values = c("yellow3", "orange3", "red3"))  +
+  theme(
+    legend.background = element_rect(fill = "white", color = "black", linetype = "solid"),
+    legend.title = element_text(size = 10),
+    plot.title = element_text(color = "black", size = 20)
+  ) +
+  ggtitle("Percentage of time with abnormal LTV") +
+  ylab("Density") +
+  xlab("Percentage")
+
+grid.arrange(density_STV, density_LTV, 
+             nrow = 2, ncol = 1)
+```
+
+For what concerns STV, the normal cases seem equally distributed (almost a uniform distribution) between the percentages of 10% and 65%. The other two cases tend to be more left-skewed, 
+having the majority of the values enclosed in the range between 55% and 95/100%. 
+The second graph is more complicated to describe. What we believe interesting is the fact that 
+also in this case the normal case distribution differs from the other two. 
+As we said before, all these differences are crucial to create a classification model, even though, most of the time, 
+it is complicated to spot a substantial distinction between pathological and suspect cases.  
+
+### 3.5 Heart Rate Histogram
+
+The Heart Rate Histograms is based on the atrial and ventricular event data stored by the device. 
+The Rate Histograms Report presents heart rate data in 3 types of histograms: atrial rate, ventricular rate, 
+and ventricular rate during AT/AF. It also presents data about the patient’s conduction status. (12)
+
+```{r hrhist, echo=FALSE, include=TRUE, message=FALSE, warning = FALSE, fig.width=12, fig.height=6}
+density_histogram_width <- ggplot(data = df_fetal_health, 
+                      aes(x = histogram_width, 
+                          fill = fetal_health)) +
+  geom_density(alpha = 0.3) + 
+  scale_fill_manual(name = "Fetal Health Condition", values = c("yellow3", "orange3", "red3"))  +
+  theme(
+    legend.background = element_rect(fill = "white", color = "black", linetype = "solid"),
+    legend.title = element_text(size = 10),
+    plot.title = element_text(color = "black", size = 20)
+  ) +
+  ggtitle("Heart Rate Histogram Width (max HR - min HR)") +
+  ylab("Density") +
+  xlab("Heart Rate Width")
+
+density_histogram_variance <- ggplot(data = df_fetal_health, 
+                      aes(x = histogram_variance, 
+                          fill = fetal_health)) +
+  geom_density(alpha = 0.3) + 
+  scale_fill_manual(name = "Fetal Health Condition", values = c("yellow3", "orange3", "red3"))  +
+  theme(
+    legend.background = element_rect(fill = "white", color = "black", linetype = "solid"),
+    legend.title = element_text(size = 10),
+    plot.title = element_text(color = "black", size = 20)
+  ) +
+  ggtitle("Hearth Rate Histogram Variance") +
+  ylab("Density") +
+  xlab("Variance")
+
+grid.arrange(density_histogram_width, density_histogram_variance, 
+             nrow = 2, ncol = 1)
+```
+
+In the graph concerning the histogram width, we can see that the three distribution differs a lot. First of all, the normal cases are fairly evenly distributed across all the recorded values (from 5 to 160). On the contrary, the suspect case distribution seems to be right-skewed, having the majority of the values on the left. The pathological cases
+present distribution with two marked peaks on the edge. 
+The plot below does not seem much helpful. In fact, our first belief was a strong correlation between foetal health and variance. As the reader can see, it is not the case.
+However, we are quite sure that the histogram width and variance could assist us in the creation of a classification model due to the fact that the distribution presents several distinctions.
+
+### 3.6 Foetal Health
+
+In this subsection, we would like to evaluate the three categories, to better understand the dataset itself. 
+
+``` {r foetal health, echo=FALSE, include=TRUE, message=FALSE, warning = FALSE}
+
+histogram_foetal_health <- ggplot(data = df_fetal_health, aes(x = fetal_health, fill = fetal_health)) +
+      geom_bar(stat = "count", alpha = 0.3) + 
+      scale_fill_manual(name = "Fetal Health Condition", values = c("yellow3", "orange3", "red3"))  +
+      theme(
+        legend.background = element_rect(fill = "white", color = "black", linetype = "solid"),
+        legend.title = element_text(size = 10),
+        plot.title = element_text(color = "black", size = 20)
+      ) +
+      ggtitle("Foetal Health") +
+      ylab("Frequency") +
+      xlab("Fetal Health")
+histogram_foetal_health
+```
+
+The graph shows the distribution across the 
+three levels (normal, suspect and pathological). The normal class seems to be 
+the most populated, with more than 1600 cases. The other categories 
+(suspect and pathological) have altogether around 500 records. 
+This situation was expected. However, it could cause some technical
+issues in the classification models.
+
+## 4. Machine Learning Models 
+
+In this section we are going to build three different models in order to create predictions. 
+We remind the reader that we do not want our model to substitute in any way professional figures. 
+On the contrary, we aim to create a tool that can assist them in double-checking their diagnosis.
+We are going to use supervised learning models since our dataset contains already the expected result. 
+Thus, we can just create the model on a training subset of data and test it on another subset.
+In addition, we would like to inform the reader that we tried to boost ulteriorly the models, 
+using feature selection. In particular, we perform the the rfe function (Recursive Feature Selection) 
+on the data. Unfortunately, the results were not significant as we expected. 
+We, therefore, decided to keep all the 21 variables. 
+
+### 4.1 Creation of Test Data and Train Data {.tabset}
+
+The first step is to create a data partition. In fact, data are going to be split into two categories, 
+train and test data. Here is the code used for this purpose. 
+
+```{r train_test, message=FALSE, warning=FALSE, echo = TRUE, eval = FALSE}
+library(mlbench)
+library(kernlab)
+library(caret)
+library(dplyr)
+set.seed(123)
+indices <- createDataPartition(df_fetal_health$fetal_health, p = .75, list = F)
+train <- df_fetal_health %>% slice(indices)
+
+test_in <- df_fetal_health %>% slice(-indices) %>% select(-fetal_health)
+test_in
+test_truth <- df_fetal_health %>% slice(-indices) %>% pull(fetal_health)
+
+
+```
+
+
+We opted for using the 75% of the data in training models, and the remaining 25% to test them. 
+We also set the partition with the command set.seed since we wanted the reader to be able to reproduce the same 
+experiment.
+
+#### 4.1.1 SVM Model
+
+In machine learning, support vector machines (SVMs, also support vector networks) are supervised learning models with 
+associated learning algorithms that analyze data for classification and regression analysis. (13)
+The SVM model is performed using two different kernels, linear and radial. We have decided
+optimal parameters through the function "tune". 
+
+```{r svmlinear, include = TRUE, echo = FALSE, cache=TRUE, warning=FALSE, message=FALSE}
+library(mlbench)
+library(kernlab)
+library(e1071)
+library(caret)
+library(dplyr)
+set.seed(123)
+indices <- createDataPartition(df_fetal_health$fetal_health, p = .75, list = F)
+train <- df_fetal_health %>% slice(indices)
+
+test_in <- df_fetal_health %>% slice(-indices) %>% select(-fetal_health)
+
+test_truth <- df_fetal_health %>% slice(-indices) %>% pull(fetal_health)
+tune_out_linear <- tune(svm, fetal_health~., data = train, kernel = "linear",
+                        ranges = list(cost = c(0.1,1,10,30)))
+# tune_out_linear$best.model
+
+tune_out_radial <- tune(svm, fetal_health~., data = train, kernel = "radial",
+                        ranges = list(cost = c(0.1,1,10),
+                                      gamma = c(0.5,1,2,3,4)))
+# tune_out_radial$best.model
+# tune_out_radial$best.model$gamma
+svm_linear <- svm(fetal_health~ ., train, kernel = "linear", 
+                              scale = TRUE, cost = 0.1)
+
+test_pred_svm_linear <- predict(svm_linear, test_in)
+# table(test_pred_svm_linear)
+
+confusion_matrix_svm_linear <- confusionMatrix(test_pred_svm_linear, test_truth, mode = "everything")
+confusion_matrix_svm_linear
+```
+
+As we can see, we already have a nice result. To decide about the goodness of the model
+we look at the F1 score, which is a balanced average between precision and recall. 
+In this case we have extremely precise result for the first and third class (normal = 0.9422 and pathological = 0.85393). 
+As we expected, the suspect cases(F1 = 0.6380) are more difficult to classify (by definition). That is why also the precision and recall 
+are lower compared to the rest. 
+The accuracy is quite significant (accuracy = 0.8943).
+
+
+```{r svmradial, message=FALSE, warning=FALSE, include = TRUE, echo = FALSE, cache = TRUE}
+library(mlbench)
+library(kernlab)
+library(e1071)
+library(caret)
+library(dplyr)
+set.seed(123)
+indices <- createDataPartition(df_fetal_health$fetal_health, p = .75, list = F)
+train <- df_fetal_health %>% slice(indices)
+
+test_in <- df_fetal_health %>% slice(-indices) %>% select(-fetal_health)
+
+# test_truth <- df_fetal_health %>% slice(-indices) %>% pull(fetal_health)
+# tune_out_linear <- tune(svm, fetal_health~., data = train, kernel = "linear",
+#                         ranges = list(cost = c(0.1,1,10,30)))
+#tune_out_linear$best.model
+
+# tune_out_radial <- tune(svm, fetal_health~., data = train, kernel = "radial",
+#                         ranges = list(cost = c(0.1,1,10),
+#                                       gamma = c(0.5,1,2,3,4)))
+# tune_out_radial$best.model
+# tune_out_radial$best.model$gamma
+
+svm_radial <- svm(fetal_health~ ., train, kernel = "radial", 
+                  scale = TRUE, cost = 10, gamma = 0.5)
+
+test_pred_svm_radial <- predict(svm_radial, test_in)
+# table(test_pred_svm_radial)
+
+confusion_matrix_svm_radial <- confusionMatrix(test_pred_svm_radial, test_truth, mode = "everything")
+confusion_matrix_svm_radial
+```
+
+In this case, the radial kernel seems to perform slightly worst. In fact, the model has a good
+precision but there is some problem with the recall. 
+The F1 coefficient are lower, in particular normal F1 = 0.9333, suspect F1 = 0.63158 
+and pathological F1 = 0.66667. 
+As we can understand, in this case the prediction on the pathological 
+cases are less precise than in the previous model.  
+
+#### 4.1.2 Random Forest Classifier Model
+
+Random forests or random decision forests is an ensemble learning method for classification, regression and other tasks that operates by constructing 
+a multitude of decision trees at training time. For classification tasks, the output of the random forest 
+is the class selected by most trees. For regression tasks, the mean or average prediction of the individual trees is returned. (14)
+In this section we are performing the random forest classifier algorithm. Also in this case we
+are going to evaluate if the F1 score is significant. 
+
+```{r random_forest, message=FALSE, warning=FALSE, include = TRUE, echo = FALSE, cache = TRUE}
+library(randomForest)
+indices <- createDataPartition(df_fetal_health$fetal_health, p = .75, list = F)
+train <- df_fetal_health %>% slice(indices)
+
+test_in <- df_fetal_health %>% slice(-indices) %>% select(-fetal_health)
+
+test_truth <- df_fetal_health %>% slice(-indices) %>% pull(fetal_health)
+
+
+random_forest <- randomForest(fetal_health~ ., train, proximity = TRUE)
+# random_forest
+
+test_rfmodel <- predict(random_forest, test_in)
+
+
+confusion_matrix_rfmodel <- confusionMatrix(test_rfmodel, test_truth, mode = "everything")
+confusion_matrix_rfmodel
+```
+
+
+For what concerns this model, the results are extremely accurate. In particular the F1 score for 
+normal and pathological cases overcomes the 90% (normal F1 = 0.9795, pathological F1 = 0.92683). 
+Also in this case there are some issues in predicting the suspect case. However the 
+F1 score seems to be acceptably high(0.8591). 
+In conclusion, the model accuracy is extremely significant (0.9585).
+
+#### 4.1.3 Multinomial Logistic Regression Model
+
+In statistics, multinomial logistic regression is a classification method that generalizes logistic regression to 
+multiclass problems, i.e. with more than two possible discrete outcomes. (15)
+We decided to perform a multinomial logistic regression to 
+classify the possible foetal health status. This is the case since we are dealing with a multiclass 
+problem (1,2,3 are the factors).
+
+```{r multinomial_logistic_regression, message=FALSE, warning=FALSE, include = TRUE, echo = FALSE}
+library(nnet)
+library(caret)
+multinomial_model <- multinom(fetal_health ~ ., train)
+
+# summary(multinomial_model)
+
+# exp(coef(multinomial_model))
+
+# head(round(fitted(multinomial_model), 2))
+
+test_multinomial_model <- predict(multinomial_model, newdata = test_in)
+
+confusion_matrix_multinomial_model <- confusionMatrix(test_multinomial_model, test_truth, mode = "everything")
+confusion_matrix_multinomial_model
+```
+
+As we can see from the output, there is a high F1 score only in the first level (normal cases F1 = 0.9653). 
+However, the other two cases seem to be more difficult to predict (suspect F1 = 0.73759, pathological F1 = 0.83333)
+The accuracy is quite significant (accuracy = 0.9245)
+
+## 5. Conclusion
+
+Our study aimed to find a suitable model for predicting foetal health. We believe to have achieved 
+that goal. We have more than a single model that can predict accurately
+the health status of a foetus. The results show how the models can predict with extreme accuracy and 
+precision the normal case. This is, by itself, a good achievement. We are pretty sure that
+all the models could be used to determine if a foetus is normal. However, the only model that can 
+distinguish between suspect cases and pathological cases is the Random Forest Classifier. 
+Thus, if the reader is interested to make a prediction using our shiny app (the reader could find the dedicated folder),
+we suggest making a prediction using the Random Forest Classifier. 
+
+### 5.1 Answer to the project’s question
+
+At the beginning of our study, we questioned ourselves about two important aspects: 
+
+1) “Can we create a model to classify and predict foetal health, based on CTG results?”
+2) “In case the answer to the first question was affirmative, can the obtained model be used as a tool to assist doctors and obstetricians to prevent child and maternal mortality?”
+
+The first answer is quite obvious. We can create a model base on CTG data. Or, better yet, we can find several models 
+that can be used for the same purpose.
+For what concerns the second question, the situation is quite different. We cannot be sure that these tools can help 
+professional figures, such as doctors and obstetricians to double-check their diagnosis, although the models are pretty accurate. 
+Therefore, we are planning to contact some expert to understand what is the real potential of this study.
+
+### 5.2 Possible implementations for the future
+
+As written in the last paragraph, we would like to show the project to a professional to measure how useful these models can be. 
+We believe that there are also other two aspects to consider:
+
+1) we need to understand if it is possible to gather data in the form that we have in this study, with the same columns and measure units. 
+2) we would like to know more about the class division, we would be able to answer the question "how do doctors define the suspect cases?".
+
+We believe that future implementation of these models can be based on these aspects. The first one is crucial to limit 
+costs. Gathering data that are already in the CTG machine is cheap. However, we do not know if every CTG machine can 
+display all these data. Therefore, if we cannot have all the data we cannot further implement the model. 
+For what concerns the class division, the main problem is that the diagnosis is based on doctor skills and subjective analysis. 
+Thus, we would like to understand the common criteria and the differences between healthcare professionals in this topic, and, if possible, 
+modelling this information, implementing what we have reached.
+
+### 5.3 Shiny App
+
+We developed a Shiny App to show the result most interactively. You can find all the 
+data in the opposite folder. 
+The idea is to provide the reader with an easy and dynamic tool to make quick predictions. 
+
+## Sources
+
+Below the reader can find all the sources and references: 
+<ol>
+  <li>https://data.unicef.org/topic/child-survival/under-five-mortality/</li>
+  <li>https://www.who.int/news-room/fact-sheets/detail/maternal-mortality</li>
+  <li>https://www.ncbi.nlm.nih.gov/books/NBK557393/</li>
+  <li>https://pubmed.ncbi.nlm.nih.gov/11874624/</li>
+  <li>https://www.kaggle.com/datasets/andrewmvd/fetal-health-classification</li>
+  <li>https://www.sciencedirect.com/topics/nursing-and-health-professions/fetus-heart-rate</li>
+  <li>https://www.aafp.org/pubs/afp/issues/1999/0501/p2487.html</li>
+  <li>https://www.ncbi.nlm.nih.gov/books/NBK532927/</li>
+  <li>https://www.ncbi.nlm.nih.gov/books/NBK470566/</li>
+  <li>https://bmcpregnancychildbirth.biomedcentral.com/articles/10.1186/s12884-016-0845-8</li>
+  <li>https://link.springer.com/chapter/10.1007/978-3-642-70358-4_20</li>
+  <li>https://www.medtronicacademy.com/features/rate-histograms-feature</li>
+  <li>https://en.wikipedia.org/wiki/Support_vector_machine</li>
+  <li>https://en.wikipedia.org/wiki/Random_forest</li>
+</ol>
+
+
