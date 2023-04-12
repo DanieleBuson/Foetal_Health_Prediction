@@ -95,7 +95,7 @@ ui <- dashboardPage(
       tabItem("eda",
               fluidRow(box(width = 12,
                 column(width = 2),
-                column(titlePanel(h1("Explanatory Data Analysis", align = "center")),
+                column(titlePanel(h1("Exploratory Data Analysis", align = "center")),
                     selectInput("eda_plot", "Feature: ", 
                                 c("Baseline Value" = "baseline.value", 
                                   "Accelerations" = "accelerations", 
